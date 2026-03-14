@@ -16,7 +16,7 @@ with st.sidebar:
     market = st.selectbox("السوق", ["S&P 500", "Nasdaq 100", "NYSE Top"])
     min_p = st.number_input("أقل سعر ($)", value=1.0)
     min_v = st.number_input("أقل سيولة", value=500000)
-    sort_by = st.selectbox("ترتيب حسب:", ["Day %", "5m %", "1m %"])
+    sort_by = st.selectbox("ترتيب حسب:", ["Day %", "5m %", "15m %", "30m %", "1h %", "2h %", "4h %", "1D %", "1W %", "1m %"])
     refresh_rate = st.slider("تحديث (ثانية)", 30, 300, 60)
 
 # --- محرك البيانات المطور للعمل وقت الإغلاق ---
