@@ -5,25 +5,23 @@ import time
 from datetime import datetime
 import requests
 
-# إعدادات الصفحة
+# إعداد الصفحة
 st.set_page_config(page_title="Salman Mega Scanner", layout="wide")
 
-st.title("🦅 رادار سلمان الشامل")
+st.title("🦅 رادار سلمان الشامل - وضع الفحص المستمر")
 
-# --- القائمة الجانبية لزيادة الربحية ---
+# --- القائمة الجانبية ---
 with st.sidebar:
     st.header("⚙️ الإعدادات")
     market = st.selectbox("السوق", ["S&P 500", "Nasdaq 100", "NYSE Top"])
     min_p = st.number_input("أقل سعر ($)", value=1.0)
     min_v = st.number_input("أقل سيولة", value=500000)
-    sort_by = st.selectbox("ترتيب حسب:", ["1m %", "5m %","15m %","30m %","1H %","2H %","4H %","1Day %","1W %","1M %"])
+    sort_by = st.selectbox("ترتيب حسب:", ["Day %", "5m %", "1m %"])
     refresh_rate = st.slider("تحديث (ثانية)", 30, 300, 60)
 
-# --- محرك البيانات المحدث لتجاوز الحظر ---
+# --- محرك البيانات المطور للعمل وقت الإغلاق ---
 def get_data():
-    # هوية متصفح وهمية لتجاوز حظر ويكيبيديا
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
-    
+    headers = {'User-Agent': 'Mozilla/5.0'}
     try:
         if market == "S&P 500":
             url = 'https://en.wikipedia.org/wiki/List_of_S%26P_500_companies'
@@ -34,49 +32,45 @@ def get_data():
             response = requests.get(url, headers=headers)
             tickers = pd.read_html(response.text)[4]['Ticker'].tolist()
         else:
-            tickers = ["AAPL", "MSFT", "NVDA", "TSLA", "AMD", "AMZN", "META", "GOOGL", "NFLX", "PYPL"]
+            tickers = ["AAPL", "MSFT", "NVDA", "TSLA", "AMD", "AMZN", "META", "GOOGL"]
         
-        tickers = [t.replace('.', '-') for t in tickers[:200]] # فحص أول 100 سهم لزيادة السرعة
+        tickers = [t.replace('.', '-') for t in tickers[:50]] 
         results = []
         
         for symbol in tickers:
             try:
                 s = yf.Ticker(symbol)
-                # جلب البيانات اللحظية والتاريخية
-                df_h = s.history(period="7d")
-                df_i = s.history(period="5d", interval="1m")
+                # جلب بيانات 5 أيام لضمان وجود بيانات حتى لو السوق مغلق
+                df_h = s.history(period="5d", interval="1m") if not s.history(period="1d", interval="1m").empty else s.history(period="5d")
                 
-                if df_h.empty or df_i.empty: continue
+                if df_h.empty: continue
                 
-                p = df_i['Close'].iloc[-1]
-                v = df_h['Volume'].iloc[-1]
+                curr_p = df_h['Close'].iloc[-1]
+                prev_p = df_h['Close'].iloc[-2]
+                vol = df_h['Volume'].iloc[-1]
                 
-                # تطبيق شروط الربحية الخاصة بك
-                if p >= min_p and v >= min_v:
+                if curr_p >= min_p and vol >= min_v:
                     results.append({
                         "Symbol": symbol,
-                        "Price": round(float(p), 2),
-                        "1m %": round(((p - df_i['Close'].iloc[-2]) / df_i['Close'].iloc[-2]) * 100, 2),
-                        "5m %": round(((p - df_i['Close'].iloc[-6]) / df_i['Close'].iloc[-6]) * 100, 2),
-                        "Day %": round(((p - df_h['Close'].iloc[-2]) / df_h['Close'].iloc[-2]) * 100, 2)
+                        "Price": round(float(curr_p), 2),
+                        "1m %": round(((curr_p - df_h['Close'].iloc[-2]) / df_h['Close'].iloc[-2]) * 100, 4) if len(df_h) > 1 else 0,
+                        "5m %": round(((curr_p - df_h['Close'].iloc[-6]) / df_h['Close'].iloc[-6]) * 100, 2) if len(df_h) > 5 else 0,
+                        "Day %": round(((curr_p - prev_p) / prev_p) * 100, 2)
                     })
             except: continue
         return pd.DataFrame(results)
-    except Exception as e:
-        st.error(f"خطأ في جلب قائمة الأسهم: {e}")
-        return pd.DataFrame()
+    except: return pd.DataFrame()
 
-# --- العرض والتحديث ---
+# --- العرض ---
 placeholder = st.empty()
 while True:
     with placeholder.container():
         df = get_data()
         if not df.empty:
-            st.write(f"✅ تحديث السوق: {datetime.now().strftime('%H:%M:%S')}")
-            # الترتيب التلقائي لاقتناص أقوى الفرص
+            st.write(f"✅ حالة السوق: {'مغلق (بيانات تاريخية)' if datetime.now().weekday() >= 5 else 'مفتوح (بيانات لحظية)'}")
+            st.write(f"⏰ توقيت الفحص: {datetime.now().strftime('%H:%M:%S')}")
             df = df.sort_values(by=sort_by, ascending=False)
-            st.dataframe(df.style.background_gradient(cmap='RdYlGn', subset=["1m %", "5m %", "Day %"]), use_container_width=True)
+            st.dataframe(df.style.background_gradient(cmap='RdYlGn', subset=["Day %"]), use_container_width=True)
         else:
-            st.warning("جاري البحث عن أسهم تطابق الشروط...")
-            
+            st.info("جاري محاولة الاتصال بالخادم وجلب البيانات... قد يستغرق ذلك دقيقة.")
     time.sleep(refresh_rate)
