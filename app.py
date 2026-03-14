@@ -44,7 +44,7 @@ def get_data():
                 s = yf.Ticker(symbol)
                 # جلب البيانات اللحظية والتاريخية
                 df_h = s.history(period="7d")
-                df_i = s.history(period="1d", interval="1m")
+                df_i = s.history(period="5d", interval="1m")
                 
                 if df_h.empty or df_i.empty: continue
                 
