@@ -26,7 +26,7 @@ def get_data():
     else:
         tickers = ["AAPL", "MSFT", "NVDA", "TSLA", "AMD", "AMZN", "META", "GOOGL"]
     
-    tickers = [t.replace('.', '-') for t in tickers[:50]] # فحص أول 50 لتسريع التشغيل
+    tickers = [t.replace('.', '-') for t in tickers[:50]] 
     results = []
     for symbol in tickers:
         try:
