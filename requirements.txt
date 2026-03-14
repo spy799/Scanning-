@@ -2,3 +2,4 @@ streamlit>=1.28.0
 yfinance>=0.2.32
 pandas>=2.0.0
 lxml>=4.9.0
+matpopit
