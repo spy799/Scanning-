@@ -1,111 +1,101 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
-import plotly.graph_objects as go
 import time
 from datetime import datetime
+import streamlit.components.v1 as components
 
-# إعداد الصفحة لتكون بملء الشاشة وتدعم الجوال
-st.set_page_config(page_title="Salman Pro Scanner", layout="wide", initial_sidebar_state="collapsed")
+# إعداد الصفحة
+st.set_page_config(page_title="Salman Ultra Scanner", layout="wide")
 
-# تحسين المظهر العام باستخدام CSS
-st.markdown("""
-    <style>
-        .main { background-color: #0e1117; }
-            .stDataFrame { border: 1px solid #30363d; border-radius: 10px; }
-                </style>
-                    """, unsafe_allow_html=True)
+# --- دالة التنبيه الصوتي (تشتغل على الجوال) ---
+def play_sound():
+    sound_html = """
+    <audio autoplay><source src="https://www.soundjay.com/buttons/beep-01a.mp3" type="audio/mpeg"></audio>
+    """
+    components.html(sound_html, height=0)
 
-                    st.title("🚀 رادار سلمان: السيولة والانفجارات اللحظية")
+st.title("🦅 رادار سلمان - صائد الفرص الانفجارية")
 
-                    # --- القائمة الجانبية ---
-                    with st.sidebar:
-                        st.header("⚙️ إعدادات الرادار")
-                            market = st.selectbox("اختر السوق", ["S&P 500", "Nasdaq 100"])
-                                num_stocks = st.slider("عدد الأسهم للفحص", 50, 500, 100)
-                                    rvol_threshold = st.slider("تنبيه سيولة (RVOL) أكبر من", 1.0, 5.0, 1.5)
-                                        refresh_rate = st.slider("تحديث تلقائي (ثانية)", 30, 300, 60)
+# --- القائمة الجانبية ---
+with st.sidebar:
+    st.header("⚙️ الإعدادات")
+    market = st.selectbox("اختر السوق", ["S&P 500", "Nasdaq 100", "NYSE Top"])
+    min_p = st.number_input("أقل سعر ($)", value=1.0)
+    min_v = st.number_input("أقل سيولة", value=500000)
+    num_assets = st.slider("عدد الأسهم", 20, 300, 100)
+    sort_by = st.selectbox("رتب حسب الأكثر صعوداً في:", 
+                          ["1m %", "5m %", "15m %", "30m %", "1h %", "4h %", "Day %", "Week %", "Month %", "3M %"])
+    refresh_rate = st.slider("تحديث كل (ثانية)", 30, 300, 60)
 
-                                        # --- دالة تحليل البيانات ---
-                                        def get_market_data():
-                                            if market == "S&P 500":
-                                                    url = 'https://en.wikipedia.org/wiki/List_of_S%26P_500_companies'
-                                                            tickers = pd.read_html(url)[0]['Symbol'].tolist()
-                                                                else:
-                                                                        url = 'https://en.wikipedia.org/wiki/Nasdaq-100'
-                                                                                tickers = pd.read_html(url)[4]['Ticker'].tolist()
+# --- محرك التحليل الشامل ---
+def get_mega_data():
+    if market == "S&P 500":
+        url = 'https://en.wikipedia.org/wiki/List_of_S%26P_500_companies'
+        tickers = pd.read_html(url)[0]['Symbol'].tolist()
+    elif market == "Nasdaq 100":
+        url = 'https://en.wikipedia.org/wiki/Nasdaq-100'
+        tickers = pd.read_html(url)[4]['Ticker'].tolist()
+    else:
+        tickers = ["BRK-B", "UNH", "V", "JPM", "MA", "WMT", "XOM", "LLY", "PG", "PFE", "BA", "KO", "DIS"]
 
-                                                                                    tickers = [t.replace('.', '-') for t in tickers[:num_stocks]]
-                                                                                        results = []
-                                                                                            
-                                                                                                for symbol in tickers:
-                                                                                                        try:
-                                                                                                                    s = yf.Ticker(symbol)
-                                                                                                                                df_l = s.history(period="22d")
-                                                                                                                                            df_s = s.history(period="1d", interval="1m")
-                                                                                                                                                        if df_l.empty or df_s.empty: continue
-                                                                                                                                                                    
-                                                                                                                                                                                p = df_l['Close'].iloc[-1]
-                                                                                                                                                                                            v = df_l['Volume'].iloc[-1]
-                                                                                                                                                                                                        rvol = v / df_l['Volume'].mean()
-                                                                                                                                                                                                                    
-                                                                                                                                                                                                                                results.append({
-                                                                                                                                                                                                                                                "Symbol": symbol, 
-                                                                                                                                                                                                                                                                "Price": round(p, 2), 
-                                                                                                                                                                                                                                                                                "RVOL": round(rvol, 2),
-                                                                                                                                                                                                                                                                                                "1m%": round(((df_s['Close'].iloc[-1]-df_s['Close'].iloc[-2])/df_s['Close'].iloc[-2]*100), 2),
-                                                                                                                                                                                                                                                                                                                "5m%": round(((df_s['Close'].iloc[-1]-df_s['Close'].iloc[-6])/df_s['Close'].iloc[-6]*100), 2),
-                                                                                                                                                                                                                                                                                                                                "15m%": round(((df_s['Close'].iloc[-1]-df_s['Close'].iloc[-16])/df_s['Close'].iloc[-16]*100), 2),
-                                                                                                                                                                                                                                                                                                                                                "Day%": round(((df_l['Close'].iloc[-1]-df_l['Close'].iloc[-2])/df_l['Close'].iloc[-2]*100), 2)
-                                                                                                                                                                                                                                                                                                                                                            })
-                                                                                                                                                                                                                                                                                                                                                                    except: continue
-                                                                                                                                                                                                                                                                                                                                                                        return pd.DataFrame(results)
+    tickers = [t.replace('.', '-') for t in tickers[:num_assets]]
+    results = []
+    
+    for symbol in tickers:
+        try:
+            s = yf.Ticker(symbol)
+            df_hist = s.history(period="6mo") 
+            df_intraday = s.history(period="2d", interval="1m")
+            
+            if df_hist.empty or df_intraday.empty: continue
+            
+            curr_p = df_intraday['Close'].iloc[-1]
+            vol = df_hist['Volume'].iloc[-1]
 
-                                                                                                                                                                                                                                                                                                                                                                        # --- وظيفة التلوين المتقدمة ---
-                                                                                                                                                                                                                                                                                                                                                                        def style_dataframe(df):
-                                                                                                                                                                                                                                                                                                                                                                            def color_rvol(val):
-                                                                                                                                                                                                                                                                                                                                                                                    color = '#1e4620' if val >= rvol_threshold else 'none'
-                                                                                                                                                                                                                                                                                                                                                                                            return f'background-color: {color}'
+            if curr_p < min_p or vol < min_v: continue
 
-                                                                                                                                                                                                                                                                                                                                                                                                return df.sort_values(by="1m%", ascending=False).style \
-                                                                                                                                                                                                                                                                                                                                                                                                        .background_gradient(cmap='RdYlGn', subset=['1m%', '5m%', 'Day%']) \
-                                                                                                                                                                                                                                                                                                                                                                                                                .applymap(color_rvol, subset=['RVOL']) \
-                                                                                                                                                                                                                                                                                                                                                                                                                        .format("{:.2f}")
+            def get_change(df, period_idx):
+                try:
+                    old_p = df['Close'].iloc[-period_idx]
+                    return round(((curr_p - old_p) / old_p) * 100, 2)
+                except: return 0.0
 
-                                                                                                                                                                                                                                                                                                                                                                                                                        # --- عرض المحتوى ---
-                                                                                                                                                                                                                                                                                                                                                                                                                        placeholder = st.empty()
+            results.append({
+                "Symbol": symbol,
+                "Price": round(float(curr_p), 2),
+                "1m %": get_change(df_intraday, 2),
+                "5m %": get_change(df_intraday, 6),
+                "15m %": get_change(df_intraday, 16),
+                "30m %": get_change(df_intraday, 31),
+                "1h %": get_change(df_intraday, 61),
+                "4h %": get_change(df_intraday, 241),
+                "Day %": round(((curr_p - df_hist['Close'].iloc[-2]) / df_hist['Close'].iloc[-2]) * 100, 2),
+                "Week %": round(((curr_p - df_hist['Close'].iloc[-6]) / df_hist['Close'].iloc[-6]) * 100, 2),
+                "Month %": round(((curr_p - df_hist['Close'].iloc[-22]) / df_hist['Close'].iloc[-22]) * 100, 2),
+                "3M %": round(((curr_p - df_hist['Close'].iloc[-64]) / df_hist['Close'].iloc[-64]) * 100, 2)
+            })
+        except: continue
+    return pd.DataFrame(results)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                        while True:
-                                                                                                                                                                                                                                                                                                                                                                                                                            with placeholder.container():
-                                                                                                                                                                                                                                                                                                                                                                                                                                    data = get_market_data()
-                                                                                                                                                                                                                                                                                                                                                                                                                                            st.write(f"⏱️ تحديث حي: {datetime.now().strftime('%H:%M:%S')}")
-                                                                                                                                                                                                                                                                                                                                                                                                                                                    
-                                                                                                                                                                                                                                                                                                                                                                                                                                                            if not data.empty:
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                        # عرض الجدول المحسن
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    st.subheader("📊 تحليل الأسهم")
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                st.dataframe(style_dataframe(data), use_container_width=True, height=450)
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        # قسم التحليل الفني للسهم الأول (الأكثر صعوداً)
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    top_stock = data.iloc[0]['Symbol']
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                st.subheader(f"📈 تحليل تقني: {top_stock}")
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        col1, col2 = st.columns([2, 1])
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                with col1:
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                c_data = yf.download(top_stock, period="1d", interval="1m", progress=False)
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                fig = go.Figure(data=[go.Candlestick(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    x=c_data.index, open=c_data['Open'], high=c_data['High'], 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        low=c_data['Low'], close=c_data['Close']
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        )])
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        fig.update_layout(template="plotly_dark", height=400, margin=dict(l=0,r=0,b=0,t=0))
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        st.plotly_chart(fig, use_container_width=True)
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                with col2:
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                st.metric("السعر الحالي", f"${data.iloc[0]['Price']}")
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                st.metric("التغير (1د)", f"{data.iloc[0]['1m%']}%")
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                st.metric("قوة السيولة (RVOL)", f"{data.iloc[0]['RVOL']}x")
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                if data.iloc[0]['RVOL'] > rvol_threshold:
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    st.success("🔥 سيولة عالية جداً!")
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                time.sleep(refresh_rate)
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                
+# --- العرض والتنبيهات ---
+placeholder = st.empty()
+
+while True:
+    with placeholder.container():
+        df = get_mega_data()
+        if not df.empty:
+            st.write(f"✅ آخر تحديث: {datetime.now().strftime('%H:%M:%S')}")
+            df = df.sort_values(by=sort_by, ascending=False)
+            
+            # ميزة التنبيه للفرصة الذهبية (أخضر في كل شيء)
+            golden = df[(df['1m %'] > 0) & (df['Day %'] > 0) & (df['Week %'] > 0)]
+            if not golden.empty:
+                play_sound()
+                st.success(f"🔥 رصد فرصة ذهبية الآن في سهم: {golden.iloc[0]['Symbol']}")
+                st.toast(f"فرصة ذهبية في {golden.iloc[0]['Symbol']}", icon="🚀")
+
+            percentage_cols = ["1m %", "5m %", "15m %", "30m %", "1h %", "4h %", "Day %", "Week %", "Month %", "3M %"]
+            st.dataframe(df.style.background_gradient(cmap='RdYlGn', subset=percentage_cols), use_container_width=True, height=600)
+            
+    time.sleep(refresh_rate)
