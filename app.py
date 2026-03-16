@@ -2,95 +2,91 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import time
-from datetime import datetime
-import requests
 
-# إعدادات الصفحة - رادار سلمان الشامل
-st.set_page_config(page_title="Salman Mega Scanner", layout="wide")
+# إعداد واجهة المستخدم
+st.set_page_config(page_title="Radar Salman Al-Shaml", layout="wide")
+st.title("🚀 Radar Salman Al-Shaml")
 
-st.title("🦅 رادار سلمان الشامل")
+# القائمة الجانبية للإعدادات
+st.sidebar.header("إعدادات الفلترة")
+market_choice = st.sidebar.selectbox("اختر السوق", ["S&P 500", "Nasdaq 100"])
+min_price = st.sidebar.number_input("أقل سعر للسهم ($)", value=10.0, step=1.0)
+min_volume = st.sidebar.number_input("أقل حجم تداول (Volume)", value=1000000, step=50000)
+refresh_rate = st.sidebar.slider("سرعة التحديث (بالثواني)", 10, 60, 30)
 
-# --- القائمة الجانبية (نفس طلباتك) ---
-with st.sidebar:
-    st.header("⚙️ إعدادات الرادار")
-    market = st.selectbox("اختر السوق", ["S&P 500", "Nasdaq 100", "الأسهم القيادية"])
-    min_p = st.number_input("أقل سعر للسهم ($)", value=1.0)
-    min_v = st.number_input("أقل حجم تداول (Volume)", value=500000)
-    sort_by = st.selectbox("ترتيب النتائج حسب:", ["1m %", "5m %", "Day %"])
-    refresh_rate = st.slider("سرعة تحديث الرادار (ثانية)", 30, 300, 60)
+# دوال جلب القوائم
+def get_tickers(market):
+    if market == "S&P 500":
+            return pd.read_html('https://en.wikipedia.org/wiki/List_of_S%26P_500_companies')[0]['Symbol'].tolist()
+                else:
+                        return pd.read_html('https://en.wikipedia.org/wiki/Nasdaq-100')[4]['Ticker'].tolist()
 
-# --- وظيفة جلب قائمة الأسهم (معالجة خطأ الصورة) ---
-def get_tickers():
-    headers = {'User-Agent': 'Mozilla/5.0'}
-    try:
-        if market == "S&P 500":
-            url = 'https://en.wikipedia.org/wiki/List_of_S%26P_500_companies'
-            res = requests.get(url, headers=headers)
-            return pd.read_html(res.text)[0]['Symbol'].tolist()[:60]
-        elif market == "Nasdaq 100":
-            url = 'https://en.wikipedia.org/wiki/Nasdaq-100'
-            res = requests.get(url, headers=headers)
-            return pd.read_html(res.text)[4]['Ticker'].tolist()[:60]
-        else:
-            return ["AAPL", "MSFT", "NVDA", "TSLA", "AMD", "AMZN", "META", "GOOGL", "NFLX", "PYPL"]
-    except:
-        # قائمة طوارئ في حال تعطل موقع ويكيبيديا لضمان استمرار البحث
-        return ["AAPL", "MSFT", "NVDA", "TSLA", "AMD", "AMZN", "META", "GOOGL"]
+                        def get_data():
+                            tickers = get_tickers(market_choice)
+                                # تنظيف الرموز التي تحتوي على نقطة لـ yfinance
+                                    tickers = [t.replace('.', '-') for t in tickers]
+                                        
+                                            results = []
+                                                progress_bar = st.progress(0)
+                                                    
+                                                        st.write(f"🔍 جاري فحص {len(tickers)} سهم في سوق {market_choice}...")
+                                                            
+                                                                for i, ticker in enumerate(tickers):
+                                                                        try:
+                                                                                    # جلب بيانات اللحظية (دقيقة) وبيانات اليوم
+                                                                                                stock = yf.Ticker(ticker)
+                                                                                                            hist_1m = stock.history(period="1d", interval="1m")
+                                                                                                                        hist_1h = stock.history(period="2d", interval="1h")
+                                                                                                                                    hist_1d = stock.history(period="5d", interval="1d")
+                                                                                                                                                
+                                                                                                                                                            if hist_1m.empty or len(hist_1m) < 2:
+                                                                                                                                                                            continue
 
-# --- محرك البحث والتحليل اللحظي ---
-def run_scanner():
-    ticker_list = get_tickers()
-    results = []
-    
-    for symbol in ticker_list:
-        try:
-            symbol = symbol.replace('.', '-')
-            s = yf.Ticker(symbol)
-            
-            # جلب البيانات اللحظية (فريم الدقيقة)
-            df_live = s.history(period="2d", interval="1m")
-            if df_live.empty: continue
-            
-            curr_p = df_live['Close'].iloc[-1]
-            vol = df_live['Volume'].iloc[-1]
-            
-            # الفلترة حسب شروطك
-            if curr_p >= min_p and vol >= min_v:
-                # حساب نسب التغير المطلوبة
-                c_1m = ((curr_p - df_live['Close'].iloc[-2]) / df_live['Close'].iloc[-2]) * 100
-                c_5m = ((curr_p - df_live['Close'].iloc[-6]) / df_live['Close'].iloc[-6]) * 100 if len(df_live) > 5 else 0
-                
-                # جلب بيانات يومية لحساب تغير اليوم
-                df_day = s.history(period="2d")
-                c_day = ((curr_p - df_day['Close'].iloc[-2]) / df_day['Close'].iloc[-2]) * 100 if len(df_day) > 1 else 0
-                
-                results.append({
-                    "Symbol": symbol,
-                    "Price": round(float(curr_p), 2),
-                    "1m %": round(float(c_1m), 2),
-                    "5m %": round(float(c_5m), 2),
-                    "Day %": round(float(c_day), 2),
-                    "Volume": int(vol)
-                })
-        except: continue
-    return pd.DataFrame(results)
+                                                                                                                                                                                        current_price = hist_1m['Close'].iloc[-1]
+                                                                                                                                                                                                    volume = hist_1m['Volume'].sum() # إجمالي حجم تداول اليوم
 
-# --- تشغيل العرض المباشر ---
-placeholder = st.empty()
-while True:
-    with placeholder.container():
-        data = run_scanner()
-        if not data.empty:
-            st.write(f"✅ تحديث الرادار: {datetime.now().strftime('%H:%M:%S')}")
-            # الترتيب حسب اختيارك
-            data = data.sort_values(by=sort_by, ascending=False)
-            
-            # عرض الجدول مع تلوين النسب (أخضر للصعود، أحمر للهبوط)
-            st.dataframe(
-                data.style.background_gradient(cmap='RdYlGn', subset=["1m %", "5m %", "Day %"]),
-                use_container_width=True
-            )
-        else:
-            st.info("جاري البحث عن فرص تطابق شروطك... تأكد من افتتاح السوق الأمريكي (5:30 م).")
-            
-    time.sleep(refresh_rate)
+                                                                                                                                                                                                                # تطبيق فلاتر السعر والسيولة
+                                                                                                                                                                                                                            if current_price < min_price or volume < min_volume:
+                                                                                                                                                                                                                                            continue
+
+                                                                                                                                                                                                                                                        # حساب نسب التغير (نفس شروطك)
+                                                                                                                                                                                                                                                                    change_1m = ((current_price - hist_1m['Close'].iloc[-2]) / hist_1m['Close'].iloc[-2]) * 100
+                                                                                                                                                                                                                                                                                change_5m = ((current_price - hist_1m['Close'].iloc[-6]) / hist_1m['Close'].iloc[-6]) * 100 if len(hist_1m) >= 6 else 0
+                                                                                                                                                                                                                                                                                            change_15m = ((current_price - hist_1m['Close'].iloc[-16]) / hist_1m['Close'].iloc[-16]) * 100 if len(hist_1m) >= 16 else 0
+                                                                                                                                                                                                                                                                                                        change_30m = ((current_price - hist_1m['Close'].iloc[-31]) / hist_1m['Close'].iloc[-31]) * 100 if len(hist_1m) >= 31 else 0
+                                                                                                                                                                                                                                                                                                                    change_1h = ((current_price - hist_1h['Close'].iloc[-2]) / hist_1h['Close'].iloc[-2]) * 100 if len(hist_1h) >= 2 else 0
+                                                                                                                                                                                                                                                                                                                                change_1d = ((current_price - hist_1d['Close'].iloc[-2]) / hist_1d['Close'].iloc[-2]) * 100 if len(hist_1d) >= 2 else 0
+
+                                                                                                                                                                                                                                                                                                                                            results.append({
+                                                                                                                                                                                                                                                                                                                                                            "Ticker": ticker,
+                                                                                                                                                                                                                                                                                                                                                                            "Price": round(current_price, 2),
+                                                                                                                                                                                                                                                                                                                                                                                            "Vol (Daily)": f"{volume:,}",
+                                                                                                                                                                                                                                                                                                                                                                                                            "1m %": round(change_1m, 2),
+                                                                                                                                                                                                                                                                                                                                                                                                                            "5m %": round(change_5m, 2),
+                                                                                                                                                                                                                                                                                                                                                                                                                                            "15m %": round(change_15m, 2),
+                                                                                                                                                                                                                                                                                                                                                                                                                                                            "30m %": round(change_30m, 2),
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                            "1h %": round(change_1h, 2),
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            "Daily %": round(change_1d, 2)
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        })
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            except Exception:
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        continue
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            progress_bar.progress((i + 1) / len(tickers))
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    return pd.DataFrame(results)
+
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    # تشغيل الرادار
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    data_df = get_data()
+
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    if not data_df.empty:
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        st.success(f"تم العثور على {len(data_df)} أسهم تطابق الشروط")
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            # عرض الجدول مع تلوين النسب (أخضر للموجب وأحمر للسالب)
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                st.dataframe(data_df.sort_values(by="5m %", ascending=False).style.format(precision=2))
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                else:
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    st.warning("لا توجد أسهم تطابق الشروط حالياً. جرب تقليل السعر أو حجم التداول.")
+
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    # إعادة التحديث التلقائي
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    time.sleep(refresh_rate)
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    st.rerun()
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    
