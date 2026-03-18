@@ -1,60 +1,81 @@
 import streamlit as st
-import yfinance as yf
+from ib_insync import *
 import pandas as pd
-import time
+from streamlit_autorefresh import st_autorefresh
+import datetime
 
-# إعداد الواجهة
-st.set_page_config(page_title="Radar Salman Al-Shaml", layout="wide")
-st.title("🚀 Radar Salman Al-Shaml")
+# إعداد واجهة المستخدم لتناسب شاشة الجوال واللابتوب
+st.set_page_config(layout="wide", page_title="IBKR 4002 Scanner")
 
-# الإعدادات الجانبية
-st.sidebar.header("إعدادات الفلترة")
-market = st.sidebar.selectbox("اختر السوق", ["S&P 500", "Nasdaq 100"])
-min_p = st.sidebar.number_input("أقل سعر ($)", value=1.0)
-min_v = st.sidebar.number_input("أقل سيولة", value=100000)
+# تحديث تلقائي للجدول كل 30 ثانية (بدون تدخل منك)
+st_autorefresh(interval=30000, key="ibkr_refresher")
 
-def get_data():
-    # جلب القوائم
-        if market == "S&P 500":
-                url = 'https://en.wikipedia.org/wiki/List_of_S%26P_500_companies'
-                        ticks = pd.read_html(url)[0]['Symbol'].tolist()
-                            else:
-                                    url = 'https://en.wikipedia.org/wiki/Nasdaq-100'
-                                            ticks = pd.read_html(url)[4]['Ticker'].tolist()
+st.title("📊 ماسح الأسهم الحقيقي (عبر Paper Gateway)")
 
-                                                ticks = [t.replace('.', '-') for t in ticks]
-                                                    results = []
-                                                        
-                                                            st.write(f"🔍 يتم الآن فحص {len(ticks)} سهم...")
-                                                                prog = st.progress(0)
-                                                                    
-                                                                        # فحص أول 40 سهم فقط للتأكد من أن الكود شغال 100% وبدون تعليق
-                                                                            for i, t in enumerate(ticks[:40]):
-                                                                                    try:
-                                                                                                s = yf.Ticker(t)
-                                                                                                            h = s.history(period="1d", interval="1m")
-                                                                                                                        if h.empty or len(h) < 2: continue
-                                                                                                                                    
-                                                                                                                                                p = h['Close'].iloc[-1]
-                                                                                                                                                            v = h['Volume'].sum()
-                                                                                                                                                                        
-                                                                                                                                                                                    if p >= min_p and v >= min_v:
-                                                                                                                                                                                                    # حساب النسب (دقيقة، 5 دقائق، ساعة)
-                                                                                                                                                                                                                    c1 = ((p - h['Close'].iloc[-2]) / h['Close'].iloc[-2]) * 100
-                                                                                                                                                                                                                                    c5 = ((p - h['Close'].iloc[-6]) / h['Close'].iloc[-6]) * 100 if len(h) >= 6 else 0
-                                                                                                                                                                                                                                                    
-                                                                                                                                                                                                                                                                    results.append({"Ticker": t, "Price": round(p, 2), "Volume": v, "1m %": round(c1, 2), "5m %": round(c5, 2)})
-                                                                                                                                                                                                                                                                            except: continue
-                                                                                                                                                                                                                                                                                    prog.progress((i + 1) / 40)
-                                                                                                                                                                                                                                                                                        return pd.DataFrame(results)
+def get_market_data():
+    ib = IB()
+    try:
+        # الاتصال بالبورت 4002 كما حددت (Paper Gateway)
+        ib.connect('127.0.0.1', 4002, clientId=1)
+        
+        # الفلترة المطلوبة: سعر > 1$ وحجم يومي > 500,000
+        sub = ScannerSubscription(
+            instrument='STK', 
+            locationCode='STK.US.MAJOR', 
+            scanCode='MOST_ACTIVE'
+        )
+        tag_values = [
+            TagValue('avgVolumeAbove', '500000'),
+            TagValue('priceAbove', '1')
+        ]
+        
+        scan_results = ib.reqScannerData(sub, filterList=tag_values)
+        # جلب أفضل 25 سهم لضمان سرعة التحديث كل 30 ثانية
+        contracts = [res.contract for res in scan_results[:25]] 
+        
+        # الأطر الزمنية من 30 ثانية حتى 3 أشهر
+        tfs = {
+            '30s': '30 secs', '1m': '1 min', '5m': '5 mins', '15m': '15 mins',
+            '30m': '30 mins', '1h': '1 hour', '2h': '2 hours', '4h': '4 hours',
+            '1D': '1 day', '1W': '1 week', '1M': '1 month', '3M': '3 months'
+        }
+        
+        rows = []
+        for contract in contracts:
+            ib.qualifyContracts(contract)
+            row = {'Symbol': contract.symbol}
+            for label, ib_tf in tfs.items():
+                # جلب البيانات التاريخية لحساب آخر شمعة
+                duration = '1 D'
+                if 'week' in label: duration = '1 M'
+                if 'month' in label: duration = '1 Y'
+                
+                bars = ib.reqHistoricalData(contract, '', duration, ib_tf, 'TRADES', False)
+                if len(bars) >= 2:
+                    change = ((bars[-1].close - bars[-2].close) / bars[-2].close) * 100
+                    row[label] = round(change, 2)
+                else:
+                    row[label] = 0.0
+            rows.append(row)
+        
+        ib.disconnect()
+        return pd.DataFrame(rows)
+    except Exception as e:
+        return pd.DataFrame([{"خطأ": f"تأكد من فتح Gateway على بورت 4002: {e}"}])
 
-                                                                                                                                                                                                                                                                                        # عرض النتائج
-                                                                                                                                                                                                                                                                                        df_final = get_data()
-                                                                                                                                                                                                                                                                                        if not df_final.empty:
-                                                                                                                                                                                                                                                                                            st.dataframe(df_final.sort_values(by="1m %", ascending=False))
-                                                                                                                                                                                                                                                                                            else:
-                                                                                                                                                                                                                                                                                                st.warning("لا توجد نتائج تطابق شروطك حالياً.")
+# جلب البيانات
+df = get_market_data()
 
-                                                                                                                                                                                                                                                                                                time.sleep(30)
-                                                                                                                                                                                                                                                                                                st.rerun()
-                                                                                                                                                                                                                                                                                                
+# العرض التفاعلي
+if not df.empty and "Symbol" in df.columns:
+    # تنسيق الألوان (أخضر للصعود وأحمر للهبوط)
+    st.dataframe(
+        df.style.background_gradient(cmap='RdYlGn', axis=0, subset=df.columns[1:]), 
+        use_container_width=True, 
+        height=800
+    )
+    st.success(f"آخر تحديث: {datetime.datetime.now().strftime('%H:%M:%S')}")
+else:
+    st.error("لم يتم العثور على بيانات. تأكد من أن الأسواق مفتوحة أو اشتراكات البيانات مفعلة.")
+
+st.sidebar.markdown(f"### 📱 للمتابعة من الجوال:\nادخل IP اللابتوب متبوعاً بـ `:8501` في المتصفح")
